@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #ffffff;
+  font-family: 'Inter','Helvetica Neue',Arial,
+               'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;
+  padding: 4px 6px 6px;
+  overflow: hidden;
+}
+
+.display {
+  background: linear-gradient(135deg, #f9f9f9 0%, #f0f0f0 100%);
+  border: 1.5px solid #e0e0e0;
+  border-radius: 16px;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.d-val {
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 0.55rem;
+  color: #1a1a2e;
+  font-variant-numeric: tabular-nums;
+}
+.d-ph {
+  color: #c5c5c5;
+  font-size: 1.05rem;
+  font-weight: 400;
+  letter-spacing: 0.3rem;
+}
+
+/* 3列グリッド。検索ボタンだけ全幅（grid-column: span 3） */
+.numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.btn {
+  background: #f6f6f6;
+  border: 1.5px solid #e2e2e2;
+  border-radius: 14px;
+  color: #1a1a2e;
+  font-family: inherit;
+  font-size: 1.55rem;
+  font-weight: 600;
+  height: 72px;
+  width: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s, box-shadow 0.12s, transform 0.08s;
+}
+.btn:hover  { background: #ececec; box-shadow: 0 3px 8px rgba(0,0,0,0.11); }
+.btn:active { background: #d8d8d8 !important; transform: scale(0.94); }
+
+/* C（全消去） */
+.btn.clear {
+  background: #fff1f1;
+  border-color: #fecaca;
+  color: #dc2626;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.btn.clear:hover  { background: #fee2e2; }
+.btn.clear:active { background: #fecaca !important; }
+
+/* 検索（全幅） */
+.btn.search {
+  grid-column: 1 / -1;
+  height: 62px;
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.btn.search:hover  { background: #1d4ed8; box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+.btn.search:active { background: #1e40af !important; }
+</style>
+</head>
+<body>
+
+<div class="display">
+  <span id="disp" class="d-ph">_&nbsp;&nbsp;_&nbsp;&nbsp;_&nbsp;&nbsp;_</span>
+</div>
+
+<div class="numpad">
+  <!-- 行1 -->
+  <button class="btn" onclick="send('7')">7</button>
+  <button class="btn" onclick="send('8')">8</button>
+  <button class="btn" onclick="send('9')">9</button>
+  <!-- 行2 -->
+  <button class="btn" onclick="send('4')">4</button>
+  <button class="btn" onclick="send('5')">5</button>
+  <button class="btn" onclick="send('6')">6</button>
+  <!-- 行3 -->
+  <button class="btn" onclick="send('1')">1</button>
+  <button class="btn" onclick="send('2')">2</button>
+  <button class="btn" onclick="send('3')">3</button>
+  <!-- 行4: C / ⌫ / 0 -->
+  <button class="btn clear" onclick="send('clear')">C</button>
+  <button class="btn" style="font-size:1.3rem" onclick="send('del')">⌫</button>
+  <button class="btn" onclick="send('0')">0</button>
+  <!-- 行5: 検索（全幅） -->
+  <button class="btn search" onclick="send('search')">🔍&nbsp;&nbsp;検索</button>
+</div>
+
+<script>
+var _digits = '';
+var _lastSent = 0;
+
+// ── Streamlit コンポーネントプロトコル ──
+window.parent.postMessage({ type: 'streamlit:componentReady', apiVersion: 1 }, '*');
+window.parent.postMessage({ type: 'streamlit:setFrameHeight', height: 500 }, '*');
+
+// Python → コンポーネント: digits プロパティ受信
+window.addEventListener('message', function(event) {
+  if (!event.data || event.data.type !== 'streamlit:render') return;
+  var args = event.data.args || {};
+  var pythonDigits = args.digits || '';
+
+  // ボタン押下後 500ms は楽観的更新を優先（チラつき防止）
+  if (Date.now() - _lastSent > 500) {
+    _digits = pythonDigits;
+    renderDisplay(_digits);
+  }
+});
+
+function renderDisplay(digits) {
+  var el = document.getElementById('disp');
+  if (digits) {
+    el.className = 'd-val';
+    el.textContent = digits;
+  } else {
+    el.className = 'd-ph';
+    el.innerHTML = '_&nbsp;&nbsp;_&nbsp;&nbsp;_&nbsp;&nbsp;_';
+  }
+}
+
+function send(key) {
+  _lastSent = Date.now();
+
+  // 楽観的UI更新
+  if (key === 'clear') {
+    _digits = '';
+  } else if (key === 'del') {
+    _digits = _digits.slice(0, -1);
+  } else if (key === 'search') {
+    _digits = '';
+  } else if (/^\d$/.test(key) && _digits.length < 4) {
+    _digits += key;
+  } else {
+    return;
+  }
+  renderDisplay(_digits);
+
+  // コンポーネント → Python 通知
+  window.parent.postMessage({
+    type: 'streamlit:componentValue',
+    value: { key: key, ts: _lastSent }
+  }, '*');
+}
+</script>
+
+</body>
+</html>
