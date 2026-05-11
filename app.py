@@ -89,218 +89,260 @@ def opt(v: str) -> str:
 def sel_idx(options: list, val: str) -> int:
     return options.index(val) if val in options else 0
 
-# ── 見積HTML生成 ──────────────────────────────────────────────────────────────
+# ── 見積HTML生成（定価 vs 提案価格 2列） ────────────────────────────────────
 def generate_estimate_html(
-    plan_label: str,
     tire_maker: str, tire_product: str, tire_size: str,
-    unit_price: int, qty: int, labor_unit: int, disp_unit: int,
+    retail_price: int, offer_price: int,
+    qty: int, labor_unit: int, disp_unit: int,
     plate: str, memo: str
 ) -> str:
-    tire_t    = unit_price * qty
-    labor_t   = labor_unit  * qty
-    disp_t    = disp_unit   * qty
-    subtotal  = tire_t + labor_t + disp_t
-    tax_amt   = int(subtotal * 0.10)
-    total     = subtotal + tax_amt
-    date_str  = datetime.now().strftime("%Y年%m月%d日")
+    labor_t  = labor_unit * qty
+    disp_t   = disp_unit  * qty
+    # 定価
+    r_tire   = retail_price * qty
+    r_sub    = r_tire + labor_t + disp_t
+    r_tax    = int(r_sub * 0.10)
+    r_total  = r_sub + r_tax
+    # 提案価格
+    o_tire   = offer_price * qty
+    o_sub    = o_tire + labor_t + disp_t
+    o_tax    = int(o_sub * 0.10)
+    o_total  = o_sub + o_tax
+    # お得額
+    savings  = r_total - o_total
+    save_pct = round(savings / r_total * 100, 1) if r_total > 0 else 0
+    date_str = datetime.now().strftime("%Y年%m月%d日")
 
     return f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <style>
-@page {{ size: A4 portrait; margin: 12mm 14mm; }}
-*{{ box-sizing:border-box; margin:0; padding:0; }}
-body{{ font-family:'Hiragino Kaku Gothic ProN','Yu Gothic','MS Gothic',sans-serif;
-      font-size:10.5pt; color:#1a1a2e; background:#fff; }}
-/* 印刷時はボタン非表示 */
+/* ── 印刷背景色を確実に出力 ── */
+* {{ -webkit-print-color-adjust:exact!important;
+     print-color-adjust:exact!important;
+     color-adjust:exact!important;
+     box-sizing:border-box; margin:0; padding:0; }}
+@page {{ size:A4 portrait; margin:10mm 12mm; }}
+body {{ font-family:'Hiragino Kaku Gothic ProN','Yu Gothic','MS Gothic',sans-serif;
+        font-size:10pt; color:#1a1a2e; background:#fff; }}
 @media print {{ .noprint{{ display:none!important; }} }}
 
-/* ヘッダー */
-.est-header{{
+/* ── ヘッダー（緑） ── */
+.est-header {{
   background:#1B5E20; color:#fff;
-  padding:12px 18px; display:flex; justify-content:space-between; align-items:center;
+  padding:11px 16px; display:flex; justify-content:space-between; align-items:center;
   border-radius:4px 4px 0 0;
 }}
-.est-header-title{{ font-size:18pt; font-weight:800; letter-spacing:.05em; }}
-.est-header-sub{{ font-size:9pt; opacity:.85; }}
-.est-doc-title{{
-  font-size:13pt; font-weight:700; color:#1B5E20;
-  text-align:center; padding:10px 0 6px; border-bottom:2.5px solid #1B5E20;
+.est-header-title {{ font-size:16pt; font-weight:800; letter-spacing:.05em; }}
+.est-doc-title {{
+  font-size:12.5pt; font-weight:700; color:#1B5E20;
+  text-align:center; padding:9px 0 5px; border-bottom:2.5px solid #1B5E20;
   letter-spacing:.15em;
 }}
-.doc-no{{ font-size:8.5pt; color:#888; text-align:right; margin:4px 0 8px; }}
+.doc-no {{ font-size:8pt; color:#999; text-align:right; margin:3px 0 6px; }}
 
-/* 顧客情報 */
-.cust-box{{
-  display:grid; grid-template-columns:1fr 1fr 1fr;
-  gap:0; border:1.5px solid #1B5E20; border-radius:4px; margin:8px 0;
+/* ── 顧客情報帯（緑枠） ── */
+.cust-box {{
+  display:grid; grid-template-columns:1fr 1fr 1fr 1fr;
+  border:1.5px solid #1B5E20; border-radius:4px; margin:6px 0 8px;
 }}
-.cust-cell{{
-  padding:7px 10px; border-right:1px solid #1B5E20;
+.cust-cell {{ padding:6px 10px; border-right:1px solid #1B5E20; }}
+.cust-cell:last-child {{ border-right:none; }}
+.cust-label {{ font-size:7.5pt; color:#666; margin-bottom:2px; }}
+.cust-val   {{ font-size:10.5pt; font-weight:700; }}
+
+/* ── 2列比較テーブル ── */
+.compare-wrap {{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:8px 0; }}
+.price-col {{ border-radius:6px; overflow:hidden; }}
+.col-header {{ padding:7px 10px; font-size:9pt; font-weight:800; text-align:center; }}
+.col-header-retail  {{ background:#607D8B; color:#fff; }}
+.col-header-offer   {{ background:#1B5E20; color:#fff; }}
+.col-body {{ padding:0; }}
+.price-row {{ display:flex; justify-content:space-between; padding:6px 10px;
+              border-bottom:1px solid rgba(0,0,0,.08); font-size:9.5pt; }}
+.price-row:last-child {{ border-bottom:none; }}
+.pr-label {{ color:#555; }}
+.pr-val   {{ font-weight:600; }}
+.col-retail-bg  {{ background:#ECEFF1; }}
+.col-offer-bg   {{ background:#E8F5E9; }}
+.col-retail-total {{ background:#B0BEC5; padding:8px 10px;
+                     display:flex; justify-content:space-between;
+                     font-size:12pt; font-weight:800; color:#263238; }}
+.col-offer-total  {{ background:#1B5E20; padding:8px 10px;
+                     display:flex; justify-content:space-between;
+                     font-size:12pt; font-weight:800; color:#fff; }}
+
+/* ── お得額ボックス（ピンク） ── */
+.savings-box {{
+  background:#FCE4EC; border:2px solid #E91E63; border-radius:6px;
+  padding:10px 16px; margin:8px 0;
+  display:flex; justify-content:space-between; align-items:center;
 }}
-.cust-cell:last-child{{ border-right:none; }}
-.cust-label{{ font-size:8pt; color:#555; margin-bottom:3px; }}
-.cust-val{{ font-size:11pt; font-weight:700; }}
+.savings-label {{ font-size:10pt; font-weight:700; color:#880E4F; }}
+.savings-amount {{ font-size:18pt; font-weight:800; color:#C62828; }}
+.savings-pct    {{ font-size:11pt; font-weight:700; color:#E91E63; margin-left:8px; }}
 
-/* 品目テーブル */
-table{{ width:100%; border-collapse:collapse; margin:10px 0; }}
-thead tr{{ background:#1B5E20; color:#fff; }}
-th{{ padding:7px 10px; text-align:center; font-size:9.5pt; font-weight:700; }}
-td{{ padding:7px 10px; border-bottom:1px solid #d0e8d0; font-size:10pt; vertical-align:middle; }}
-.td-center{{ text-align:center; }}
-.td-right{{ text-align:right; }}
-.item-main{{ font-weight:600; }}
-.item-sub{{ font-size:8.5pt; color:#666; margin-top:1px; }}
-tr.subtotal-row td{{ background:#F1F8E9; border-top:1.5px solid #1B5E20; font-weight:600; }}
-tr.tax-row td{{ background:#F1F8E9; }}
-
-/* 合計行 */
-tr.total-row td{{
+/* ── 品目明細テーブル（緑枠） ── */
+.detail-section {{ margin:8px 0; }}
+.detail-title {{ font-size:8.5pt; font-weight:700; color:#1B5E20;
+                 border-bottom:1.5px solid #1B5E20; padding-bottom:3px; margin-bottom:4px; }}
+table {{ width:100%; border-collapse:collapse; }}
+thead tr {{ background:#1B5E20; color:#fff; }}
+th {{ padding:6px 8px; font-size:8.5pt; font-weight:700; }}
+td {{ padding:6px 8px; border-bottom:1px solid #C8E6C9; font-size:9.5pt; vertical-align:middle; }}
+.td-c {{ text-align:center; }}
+.td-r {{ text-align:right; }}
+.item-main {{ font-weight:600; }}
+.item-sub  {{ font-size:7.5pt; color:#777; }}
+tr.row-sub {{ background:#F1F8E9; }}
+tr.row-tax {{ background:#F1F8E9; }}
+tr.row-offer-total td {{
   background:#FCE4EC; border-top:2px solid #C62828;
-  font-size:13pt; font-weight:800; color:#C62828;
-  padding:10px;
-}}
-.total-label{{ font-size:10pt; }}
-
-/* プランバッジ */
-.plan-badge{{
-  display:inline-block; background:#1B5E20; color:#fff;
-  padding:3px 14px; border-radius:20px; font-size:9pt; font-weight:700;
-  margin-bottom:10px;
+  font-size:11.5pt; font-weight:800; color:#C62828;
 }}
 
-/* メモ */
-.memo-section{{
-  border:1.5px solid #E91E63; border-radius:4px; padding:10px 14px; margin-top:12px;
-}}
-.memo-title{{ font-size:9pt; font-weight:700; color:#E91E63; margin-bottom:6px; }}
-.memo-body{{ font-size:10pt; line-height:1.8; min-height:60px; white-space:pre-wrap; }}
+/* ── メモ（ピンク枠） ── */
+.memo-section {{ border:1.5px solid #E91E63; border-radius:4px; padding:8px 12px; margin-top:8px; }}
+.memo-title   {{ font-size:8pt; font-weight:700; color:#E91E63; margin-bottom:4px; }}
+.memo-body    {{ font-size:9.5pt; line-height:1.75; min-height:44px; white-space:pre-wrap; }}
 
-/* フッター */
-.footer{{
-  margin-top:20px; border-top:1px solid #ccc;
-  padding-top:8px; font-size:8.5pt; color:#888;
-  display:flex; justify-content:space-between;
+/* ── フッター ── */
+.footer {{
+  margin-top:14px; border-top:1px solid #ccc; padding-top:6px;
+  font-size:8pt; color:#999; display:flex; justify-content:space-between;
 }}
-.stamp-area{{
-  border:1px solid #ccc; border-radius:4px;
-  width:80px; height:50px; text-align:center;
-  font-size:8pt; color:#ccc; line-height:50px;
-}}
+.stamp-area {{ border:1px solid #ccc; width:72px; height:44px;
+               text-align:center; line-height:44px; font-size:7.5pt; color:#ccc; border-radius:4px; }}
 
-/* 印刷ボタン */
-.print-btn{{
-  display:block; margin:14px auto 8px; padding:10px 36px;
+/* ── 印刷ボタン ── */
+.print-btn {{
+  display:block; margin:10px auto 6px; padding:9px 34px;
   background:#1B5E20; color:#fff; border:none; border-radius:8px;
-  font-size:13pt; font-weight:700; cursor:pointer; letter-spacing:.05em;
+  font-size:12pt; font-weight:700; cursor:pointer;
 }}
-.print-btn:hover{{ background:#2E7D32; }}
+.print-btn:hover {{ background:#2E7D32; }}
 </style>
 </head>
 <body>
 <button class="print-btn noprint" onclick="window.print()">🖨️ 印刷する</button>
 
+<!-- ヘッダー -->
 <div class="est-header">
   <div>
-    <div class="est-header-title">⛽ タイヤ見積書</div>
-    <div class="est-header-sub">GS 接客支援システム</div>
+    <div class="est-header-title">⛽ タイヤ御見積書</div>
+    <div style="font-size:8.5pt;opacity:.85">GS 接客支援システム</div>
   </div>
-  <div style="text-align:right;font-size:9.5pt">
-    発行日：{date_str}<br>
-    担当：___________
+  <div style="text-align:right;font-size:9pt">
+    発行日：{date_str}<br>担当：___________
   </div>
 </div>
-
 <div class="est-doc-title">タ イ ヤ 御 見 積 書</div>
-<div class="doc-no">No. {datetime.now().strftime("%Y%m%d%H%M")}</div>
+<div class="doc-no">No.{datetime.now().strftime("%Y%m%d%H%M")}</div>
 
-<div style="margin:4px 0 8px">
-  <span class="plan-badge">{'⭐ プランA　オススメ' if plan_label=='A' else '💰 プランB　お買い得'}</span>
-</div>
-
+<!-- 顧客情報 -->
 <div class="cust-box">
-  <div class="cust-cell">
-    <div class="cust-label">車番</div>
-    <div class="cust-val">{plate if plate else '　　　　'}</div>
+  <div class="cust-cell"><div class="cust-label">車番</div><div class="cust-val">{plate or '　　　　'}</div></div>
+  <div class="cust-cell"><div class="cust-label">タイヤメーカー</div><div class="cust-val">{tire_maker or '　　　'}</div></div>
+  <div class="cust-cell"><div class="cust-label">商品名</div><div class="cust-val">{tire_product or '　　　'}</div></div>
+  <div class="cust-cell"><div class="cust-label">タイヤサイズ</div><div class="cust-val">{tire_size or '　　　'}</div></div>
+</div>
+
+<!-- 定価 vs 提案価格 2列比較 -->
+<div class="compare-wrap">
+  <!-- 定価列 -->
+  <div class="price-col">
+    <div class="col-header col-header-retail">定価（メーカー希望小売価格）</div>
+    <div class="col-body">
+      <div class="price-row col-retail-bg"><span class="pr-label">🛞 タイヤ代 {qty}本</span><span class="pr-val">¥{r_tire:,}</span></div>
+      <div class="price-row col-retail-bg"><span class="pr-label">🔧 工賃 {qty}本</span><span class="pr-val">¥{labor_t:,}</span></div>
+      <div class="price-row col-retail-bg"><span class="pr-label">♻️ 廃タイヤ {qty}本</span><span class="pr-val">¥{disp_t:,}</span></div>
+      <div class="price-row col-retail-bg"><span class="pr-label">消費税 10%</span><span class="pr-val">¥{r_tax:,}</span></div>
+    </div>
+    <div class="col-retail-total"><span>定価合計（税込）</span><span>¥{r_total:,}</span></div>
   </div>
-  <div class="cust-cell">
-    <div class="cust-label">タイヤサイズ</div>
-    <div class="cust-val">{tire_size if tire_size else '　　　　'}</div>
-  </div>
-  <div class="cust-cell">
-    <div class="cust-label">発行日</div>
-    <div class="cust-val">{date_str}</div>
+  <!-- 提案価格列 -->
+  <div class="price-col">
+    <div class="col-header col-header-offer">★ 提案価格（今回のご提案）</div>
+    <div class="col-body">
+      <div class="price-row col-offer-bg"><span class="pr-label">🛞 タイヤ代 {qty}本</span><span class="pr-val">¥{o_tire:,}</span></div>
+      <div class="price-row col-offer-bg"><span class="pr-label">🔧 工賃 {qty}本</span><span class="pr-val">¥{labor_t:,}</span></div>
+      <div class="price-row col-offer-bg"><span class="pr-label">♻️ 廃タイヤ {qty}本</span><span class="pr-val">¥{disp_t:,}</span></div>
+      <div class="price-row col-offer-bg"><span class="pr-label">消費税 10%</span><span class="pr-val">¥{o_tax:,}</span></div>
+    </div>
+    <div class="col-offer-total"><span>提案価格合計（税込）</span><span>¥{o_total:,}</span></div>
   </div>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th style="width:42%;text-align:left">品名・内容</th>
-      <th style="width:8%">数量</th>
-      <th style="width:12%">単位</th>
-      <th style="width:19%">単価（税抜）</th>
-      <th style="width:19%">金額（税抜）</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>
-        <div class="item-main">タイヤ代　{tire_maker}</div>
-        <div class="item-sub">{tire_product}　{tire_size}</div>
-      </td>
-      <td class="td-center">{qty}</td>
-      <td class="td-center">本</td>
-      <td class="td-right">¥{unit_price:,}</td>
-      <td class="td-right">¥{tire_t:,}</td>
-    </tr>
-    <tr>
-      <td><div class="item-main">タイヤ取付工賃</div></td>
-      <td class="td-center">{qty}</td>
-      <td class="td-center">本</td>
-      <td class="td-right">¥{labor_unit:,}</td>
-      <td class="td-right">¥{labor_t:,}</td>
-    </tr>
-    <tr>
-      <td><div class="item-main">廃タイヤ処理料</div></td>
-      <td class="td-center">{qty}</td>
-      <td class="td-center">本</td>
-      <td class="td-right">¥{disp_unit:,}</td>
-      <td class="td-right">¥{disp_t:,}</td>
-    </tr>
-    <tr class="subtotal-row">
-      <td colspan="4" style="text-align:right">小 計（税抜）</td>
-      <td class="td-right">¥{subtotal:,}</td>
-    </tr>
-    <tr class="tax-row">
-      <td colspan="4" style="text-align:right">消費税（10%）</td>
-      <td class="td-right">¥{tax_amt:,}</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="4" style="text-align:right">
-        <span class="total-label">★ 合 計（税込）</span>
-      </td>
-      <td class="td-right">¥{total:,}</td>
-    </tr>
-  </tbody>
-</table>
+<!-- お得額（ピンク枠） -->
+<div class="savings-box">
+  <div>
+    <div class="savings-label">🎉 定価との差額（お得額）</div>
+    <div style="font-size:8pt;color:#888;margin-top:2px">定価合計 ¥{r_total:,} → 提案価格合計 ¥{o_total:,}</div>
+  </div>
+  <div>
+    <span class="savings-amount">¥{savings:,}</span>
+    <span class="savings-pct">({save_pct}% OFF)</span>
+  </div>
+</div>
 
+<!-- 品目明細（緑枠テーブル） -->
+<div class="detail-section">
+  <div class="detail-title">■ 品目明細（提案価格ベース）</div>
+  <table>
+    <thead><tr>
+      <th style="width:40%;text-align:left">品名・内容</th>
+      <th style="width:8%" class="td-c">数量</th>
+      <th style="width:10%" class="td-c">単位</th>
+      <th style="width:21%" class="td-r">単価（税抜）</th>
+      <th style="width:21%" class="td-r">金額（税抜）</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><div class="item-main">{tire_maker}</div><div class="item-sub">{tire_product}　{tire_size}</div></td>
+        <td class="td-c">{qty}</td><td class="td-c">本</td>
+        <td class="td-r">¥{offer_price:,}</td><td class="td-r">¥{o_tire:,}</td>
+      </tr>
+      <tr>
+        <td><div class="item-main">タイヤ取付工賃</div></td>
+        <td class="td-c">{qty}</td><td class="td-c">本</td>
+        <td class="td-r">¥{labor_unit:,}</td><td class="td-r">¥{labor_t:,}</td>
+      </tr>
+      <tr>
+        <td><div class="item-main">廃タイヤ処理料</div></td>
+        <td class="td-c">{qty}</td><td class="td-c">本</td>
+        <td class="td-r">¥{disp_unit:,}</td><td class="td-r">¥{disp_t:,}</td>
+      </tr>
+      <tr class="row-sub">
+        <td colspan="4" class="td-r">小計（税抜）</td>
+        <td class="td-r">¥{o_sub:,}</td>
+      </tr>
+      <tr class="row-tax">
+        <td colspan="4" class="td-r">消費税（10%）</td>
+        <td class="td-r">¥{o_tax:,}</td>
+      </tr>
+      <tr class="row-offer-total">
+        <td colspan="4" class="td-r">★ ご請求合計（税込）</td>
+        <td class="td-r">¥{o_total:,}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 接客メモ（ピンク枠） -->
 <div class="memo-section">
   <div class="memo-title">📝 接客メモ・特記事項</div>
   <div class="memo-body">{memo if memo else '　'}</div>
 </div>
 
+<!-- フッター -->
 <div class="footer">
   <div>
     ※ 本見積の有効期限は発行日より30日間です。<br>
-    ※ 価格はすべて消費税10%込みの金額です。
+    ※ 定価はメーカー希望小売価格（税込）を参考としています。
   </div>
-  <div style="text-align:right">
-    <div class="stamp-area">確認印</div>
-  </div>
+  <div style="text-align:right"><div class="stamp-area">確認印</div></div>
 </div>
-
 </body>
 </html>"""
 
@@ -368,18 +410,11 @@ html,body,[class*="css"]{font-family:'Inter','Helvetica Neue',Arial,'Hiragino Ka
 .bg-女{background:#fce7f3;color:#9d174d;}
 .bg-無記名{background:#f1f5f9;color:#94a3b8;}
 
-/* 見積カード */
-.q-card{border-radius:16px;padding:14px 16px;margin-bottom:4px;}
-.q-card-a{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;}
-.q-card-b{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;}
-.q-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:.84rem;}
+/* 見積カード共通 */
+.q-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.07);font-size:.84rem;}
 .q-row:last-child{border-bottom:none;}
 .q-label{color:#666;}
 .q-val{font-weight:600;color:#1a1a2e;}
-.q-total-a{font-size:1.25rem;font-weight:800;color:#1d4ed8;padding-top:10px;margin-top:6px;border-top:2px solid #93c5fd;display:flex;justify-content:space-between;}
-.q-total-b{font-size:1.25rem;font-weight:800;color:#15803d;padding-top:10px;margin-top:6px;border-top:2px solid #86efac;display:flex;justify-content:space-between;}
-.q-plan-a{font-size:.92rem;font-weight:800;color:#1d4ed8;margin-bottom:8px;}
-.q-plan-b{font-size:.92rem;font-weight:800;color:#15803d;margin-bottom:8px;}
 
 /* A表チェック */
 .acheck-ok{background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:10px 12px;text-align:center;}
@@ -487,50 +522,91 @@ with right:
 
         st.markdown("<div style='font-size:1rem;font-weight:800;color:#1a1a2e;margin:6px 0 2px'>🛞 タイヤ見積作成</div>", unsafe_allow_html=True)
 
-        # 共通設定
-        st.markdown("<div class='sec-title'>共通設定</div>", unsafe_allow_html=True)
-        s1,s2,s3,s4 = st.columns(4)
-        with s1: q_qty        = st.selectbox("本数", [4,2,1], key="q_qty")
-        with s2: q_labor_unit = st.number_input("工賃（1本・税抜）", min_value=0, value=2500, step=100, key="q_labor_unit", format="%d")
-        with s3: q_disp_unit  = st.number_input("廃タイヤ（1本）",   min_value=0, value=300,  step=50,  key="q_disp_unit",  format="%d")
-        with s4: q_plate      = st.text_input("車番下4桁（任意）", placeholder="1234", max_chars=4, key="q_plate")
+        # ── 共通設定（タイヤ商品 + 本数 + 工賃 + 廃タイヤ + 車番）────────────────
+        st.markdown("<div class='sec-title'>タイヤ・共通設定</div>", unsafe_allow_html=True)
+        ta1,ta2,ta3 = st.columns([2,2,2])
+        with ta1: q_tm = st.selectbox("タイヤメーカー", TIRE_MAKER_OPTIONS, key="q_tm")
+        with ta2: q_tp = st.text_input("商品名", placeholder="ENASAVE EC204", key="q_tp")
+        with ta3: q_ts = st.text_input("タイヤサイズ", placeholder="195/65R15", key="q_ts")
+
+        tb1,tb2,tb3,tb4 = st.columns(4)
+        with tb1: q_qty        = st.selectbox("本数", [4,2,1], key="q_qty")
+        with tb2: q_labor_unit = st.number_input("工賃（1本・税抜）", min_value=0, value=2500, step=100, key="q_labor_unit", format="%d")
+        with tb3: q_disp_unit  = st.number_input("廃タイヤ（1本）",   min_value=0, value=300,  step=50,  key="q_disp_unit",  format="%d")
+        with tb4: q_plate      = st.text_input("車番下4桁（任意）", placeholder="1234", max_chars=4, key="q_plate")
 
         labor_sub = q_labor_unit * q_qty
         disp_sub  = q_disp_unit  * q_qty
 
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-        # プランA / B 並列入力
-        col_a, col_b = st.columns(2, gap="medium")
-        plans: dict = {}
-        for col, pk, card_cls, total_cls, plan_lbl_cls, emoji, pname in [
-            (col_a,"A","q-card-a","q-total-a","q-plan-a","⭐","プランA　オススメ"),
-            (col_b,"B","q-card-b","q-total-b","q-plan-b","💰","プランB　お買い得"),
-        ]:
-            with col:
-                st.markdown(f"<div class='{card_cls} q-card'>", unsafe_allow_html=True)
-                st.markdown(f"<div class='{plan_lbl_cls}'>{emoji} {pname}</div>", unsafe_allow_html=True)
-                tm   = st.selectbox("タイヤメーカー", TIRE_MAKER_OPTIONS, key=f"q_{pk}_tm")
-                tp   = st.text_input("商品名", placeholder="ENASAVE EC204", key=f"q_{pk}_tp")
-                ts   = st.text_input("タイヤサイズ", placeholder="195/65R15", key=f"q_{pk}_ts")
-                unit = st.number_input("単価（1本・税抜）", min_value=0, value=15000, step=500, key=f"q_{pk}_price", format="%d")
-                tire_t   = unit * q_qty
-                subtotal = tire_t + labor_sub + disp_sub
-                tax_amt  = int(subtotal * 0.10)
-                total    = subtotal + tax_amt
-                plans[pk] = {"maker":opt(tm),"product":tp,"size":ts,"unit":unit,
-                              "tire_t":tire_t,"subtotal":subtotal,"tax":tax_amt,"total":total}
-                st.markdown(f"""
-                <div style="margin-top:10px">
-                <div class="q-row"><span class="q-label">🛞 タイヤ代（{q_qty}本）</span><span class="q-val">¥{tire_t:,}</span></div>
-                <div class="q-row"><span class="q-label">🔧 工賃（{q_qty}本）</span><span class="q-val">¥{labor_sub:,}</span></div>
-                <div class="q-row"><span class="q-label">♻️ 廃タイヤ（{q_qty}本）</span><span class="q-val">¥{disp_sub:,}</span></div>
-                <div class="q-row"><span class="q-label">消費税（10%）</span><span class="q-val">¥{tax_amt:,}</span></div>
-                <div class="{total_cls}"><span>税込合計</span><span>¥{total:,}</span></div>
-                </div>""", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+        # ── 定価 vs 提案価格 2列 ─────────────────────────────────────────────
+        col_r, col_o = st.columns(2, gap="medium")
 
-        # A表チェック
+        # 定価列（グレー系）
+        with col_r:
+            st.markdown("<div style='background:linear-gradient(135deg,#eceff1,#cfd8dc);border:1.5px solid #90a4ae;border-radius:14px;padding:14px 16px'>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:.9rem;font-weight:800;color:#455a64;margin-bottom:8px'>📋 定価（メーカー希望小売価格）</div>", unsafe_allow_html=True)
+            q_retail = st.number_input("定価（1本・税抜）", min_value=0, value=20000, step=500, key="q_retail", format="%d")
+            r_tire   = q_retail * q_qty
+            r_sub    = r_tire + labor_sub + disp_sub
+            r_tax    = int(r_sub * 0.10)
+            r_total  = r_sub + r_tax
+            st.markdown(f"""
+            <div style="margin-top:10px">
+            <div class="q-row"><span class="q-label">🛞 タイヤ代（{q_qty}本）</span><span class="q-val">¥{r_tire:,}</span></div>
+            <div class="q-row"><span class="q-label">🔧 工賃（{q_qty}本）</span><span class="q-val">¥{labor_sub:,}</span></div>
+            <div class="q-row"><span class="q-label">♻️ 廃タイヤ（{q_qty}本）</span><span class="q-val">¥{disp_sub:,}</span></div>
+            <div class="q-row"><span class="q-label">消費税（10%）</span><span class="q-val">¥{r_tax:,}</span></div>
+            <div style="font-size:1.1rem;font-weight:800;color:#455a64;padding-top:10px;margin-top:6px;border-top:2px solid #90a4ae;display:flex;justify-content:space-between">
+                <span>定価合計（税込）</span><span>¥{r_total:,}</span>
+            </div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # 提案価格列（緑系）
+        with col_o:
+            st.markdown("<div style='background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border:1.5px solid #66bb6a;border-radius:14px;padding:14px 16px'>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:.9rem;font-weight:800;color:#2e7d32;margin-bottom:8px'>⭐ 提案価格（今回のご提案）</div>", unsafe_allow_html=True)
+            q_offer  = st.number_input("提案価格（1本・税抜）", min_value=0, value=15000, step=500, key="q_offer", format="%d")
+            o_tire   = q_offer * q_qty
+            o_sub    = o_tire + labor_sub + disp_sub
+            o_tax    = int(o_sub * 0.10)
+            o_total  = o_sub + o_tax
+            st.markdown(f"""
+            <div style="margin-top:10px">
+            <div class="q-row"><span class="q-label">🛞 タイヤ代（{q_qty}本）</span><span class="q-val">¥{o_tire:,}</span></div>
+            <div class="q-row"><span class="q-label">🔧 工賃（{q_qty}本）</span><span class="q-val">¥{labor_sub:,}</span></div>
+            <div class="q-row"><span class="q-label">♻️ 廃タイヤ（{q_qty}本）</span><span class="q-val">¥{disp_sub:,}</span></div>
+            <div class="q-row"><span class="q-label">消費税（10%）</span><span class="q-val">¥{o_tax:,}</span></div>
+            <div style="font-size:1.2rem;font-weight:800;color:#1b5e20;padding-top:10px;margin-top:6px;border-top:2px solid #66bb6a;display:flex;justify-content:space-between">
+                <span>提案合計（税込）</span><span>¥{o_total:,}</span>
+            </div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── お得額（ピンク強調ボックス） ──────────────────────────────────────
+        savings  = r_total - o_total
+        save_pct = round(savings / r_total * 100, 1) if r_total > 0 else 0.0
+        save_color = "#c62828" if savings > 0 else "#888"
+        savings_html = f"""
+        <div style="background:#FCE4EC;border:2px solid #E91E63;border-radius:14px;
+                    padding:14px 20px;margin:10px 0;
+                    display:flex;justify-content:space-between;align-items:center">
+            <div>
+                <div style="font-size:.78rem;font-weight:700;color:#880E4F;margin-bottom:4px">🎉 定価との差額（お得額）</div>
+                <div style="font-size:.75rem;color:#888">定価 ¥{r_total:,} → 提案価格 ¥{o_total:,}</div>
+            </div>
+            <div style="text-align:right">
+                <span style="font-size:2rem;font-weight:800;color:{save_color}">¥{abs(savings):,}</span>
+                <span style="font-size:1.1rem;font-weight:700;color:#e91e63;margin-left:6px">
+                    {"" if savings <= 0 else f"({save_pct}% OFF)"}
+                </span>
+            </div>
+        </div>"""
+        st.markdown(savings_html, unsafe_allow_html=True)
+
+        # ── A表（3割引ライン）チェック ────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='sec-title'>📊 A表（3割引ライン）チェック</div>", unsafe_allow_html=True)
         ac1, ac2 = st.columns([1,2])
@@ -541,81 +617,71 @@ with right:
         with ac2:
             st.markdown(f"""
             <div style="background:#f8faff;border:1px solid #dbeafe;border-radius:12px;padding:10px 14px;margin-top:22px">
-                <div style="font-size:.73rem;color:#4b6cb7;font-weight:700;margin-bottom:5px">A表3割引ライン（税抜・全込み）</div>
+                <div style="font-size:.72rem;color:#4b6cb7;font-weight:700;margin-bottom:5px">A表3割引ライン（税抜・工賃込み）</div>
                 <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem">
                     <span>タイヤ: <b>¥{a_tire_line:,}</b></span>
                     <span>工賃: <b>¥{labor_sub:,}</b></span>
                     <span>廃タイヤ: <b>¥{disp_sub:,}</b></span>
-                    <span style="font-size:.98rem;font-weight:800;color:#1d4ed8">最低ライン ¥{a_total_line:,}</span>
+                    <span style="font-size:.96rem;font-weight:800;color:#1d4ed8">最低ライン ¥{a_total_line:,}</span>
                 </div>
             </div>""", unsafe_allow_html=True)
 
-        chk_a, chk_b = st.columns(2)
-        for cc, pk, pname in [(chk_a,"A","プランA"),(chk_b,"B","プランB")]:
-            diff = plans[pk]["subtotal"] - a_total_line
-            ok   = diff >= 0
-            with cc:
-                if ok:
-                    st.markdown(f'<div class="acheck-ok"><div style="font-size:1.3rem">✅</div><div style="font-weight:700;color:#166534">{pname}　利益あり</div><div style="font-size:.8rem;color:#166534">+¥{diff:,}</div></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="acheck-ng"><div style="font-size:1.3rem">❌</div><div style="font-weight:700;color:#991b1b">{pname}　赤字注意</div><div style="font-size:.8rem;color:#991b1b">-¥{abs(diff):,} 不足</div></div>', unsafe_allow_html=True)
+        # 提案価格でのA表判定（1列のみ）
+        diff = o_sub - a_total_line
+        ok   = diff >= 0
+        if ok:
+            st.markdown(f'<div class="acheck-ok" style="margin-top:6px"><div style="font-size:1.2rem">✅</div><div style="font-weight:700;color:#166534">提案価格　利益あり（A表ライン +¥{diff:,}）</div></div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="acheck-ng" style="margin-top:6px"><div style="font-size:1.2rem">❌</div><div style="font-weight:700;color:#991b1b">提案価格　赤字注意（A表ライン -¥{abs(diff):,} 不足）</div></div>', unsafe_allow_html=True)
 
-        # 接客メモ
+        # ── 接客メモ ──────────────────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='sec-title'>✏️ 接客メモ（殴り書きOK）</div>", unsafe_allow_html=True)
         st.markdown("<div style='background:#fffde7;border:1.5px solid #f9d71c;border-radius:10px;padding:4px 8px'>", unsafe_allow_html=True)
-        q_memo = st.text_area("接客メモ", placeholder="お客様要望・タイヤ状態・次回案内など", height=150, key="q_memo", label_visibility="collapsed")
+        q_memo = st.text_area("接客メモ", placeholder="お客様要望・タイヤ状態・次回案内など", height=140, key="q_memo", label_visibility="collapsed")
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── 印刷プレビュー ────────────────────────────────────────────────────
+        # ── 見積書プレビュー・印刷 ────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='sec-title'>🖨️ 見積書印刷</div>", unsafe_allow_html=True)
-        pr1, pr2, pr3, pr4 = st.columns(4)
-        with pr1:
-            print_plan = st.radio("印刷するプラン", ["A（オススメ）","B（お買い得）"], horizontal=True, key="print_plan_sel")
+        pr1, pr2 = st.columns([2, 1])
         with pr2:
             do_print = st.button("📄 見積書プレビュー・印刷", use_container_width=True, key="do_print")
 
         if do_print or st.session_state.get("show_print"):
             st.session_state["show_print"] = True
-            sel = "A" if "A" in print_plan else "B"
-            p   = plans[sel]
             html_str = generate_estimate_html(
-                sel, p["maker"], p["product"], p["size"],
-                p["unit"], q_qty, q_labor_unit, q_disp_unit,
+                opt(q_tm), q_tp, q_ts,
+                q_retail, q_offer,
+                q_qty, q_labor_unit, q_disp_unit,
                 q_plate, q_memo
             )
-            components.html(html_str, height=980, scrolling=True)
+            components.html(html_str, height=1080, scrolling=True)
             if st.button("プレビューを閉じる", key="close_print"):
-                st.session_state["show_print"] = False
-                st.rerun()
+                st.session_state["show_print"] = False; st.rerun()
         else:
             st.session_state["show_print"] = False
 
-        # 保存ボタン
+        # ── 保存ボタン ────────────────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-        sv_a, sv_b, sv_c = st.columns(3)
+        sv_a, sv_b = st.columns(2)
 
-        def build_quote_row(pk: str) -> dict:
-            p = plans[pk]
-            note = (f"【プラン{pk}】{p['maker']} {p['product']} {p['size']} "
-                    f"/ {q_qty}本 / ¥{p['unit']:,}/本 / 税込¥{p['total']:,}"
+        def build_quote_row() -> dict:
+            note = (f"【タイヤ見積】{opt(q_tm)} {q_tp} {q_ts} / {q_qty}本 "
+                    f"/ 定価¥{q_retail:,}→提案¥{q_offer:,}/本 / 税込¥{o_total:,} "
+                    f"/ お得額¥{savings:,}"
                     + (f"\n{q_memo}" if q_memo else ""))
             return {"date":datetime.now().strftime("%Y/%m/%d %H:%M"),"purpose":"タイヤ見積",
                     "cust_type":"","plate_area":"","plate_3digit":"","plate_kana":"",
                     "plate_num":q_plate,"maker":"","car_model":"","color":"","age":"","gender":"",
-                    "tire_size":p["size"],"tire_size_num":tire_to_num(p["size"]),
-                    "tire_year":"","tire_maker":p["maker"],"tire_product":p["product"],"memo":note}
+                    "tire_size":q_ts,"tire_size_num":tire_to_num(q_ts),
+                    "tire_year":"","tire_maker":opt(q_tm),"tire_product":q_tp,"memo":note}
 
         with sv_a:
-            if st.button("📋 プランAで保存", type="primary", use_container_width=True, key="save_qa"):
-                append_record(build_quote_row("A"))
-                st.success("プランA保存完了！"); st.session_state.mode="list"; st.session_state.searched_plate=q_plate or ""; st.rerun()
+            if st.button("📋 見積を履歴に保存", type="primary", use_container_width=True, key="save_quote"):
+                append_record(build_quote_row())
+                st.success("見積を保存しました！"); st.session_state.mode="list"; st.session_state.searched_plate=q_plate or ""; st.rerun()
         with sv_b:
-            if st.button("📋 プランBで保存", use_container_width=True, key="save_qb"):
-                append_record(build_quote_row("B"))
-                st.success("プランB保存完了！"); st.session_state.mode="list"; st.session_state.searched_plate=q_plate or ""; st.rerun()
-        with sv_c:
             if st.button("閉じる", use_container_width=True, key="close_quote"):
                 st.session_state.mode="list"; st.rerun()
 
