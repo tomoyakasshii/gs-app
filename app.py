@@ -47,7 +47,6 @@ def load_history() -> pd.DataFrame:
         df.to_csv(HISTORY_CSV, index=False)
         return df
     df = pd.read_csv(HISTORY_CSV, dtype=str).fillna("")
-    # 旧フォーマット (plate, type, note) → 新フォーマットへ移行
     if "plate" in df.columns and "plate_num" not in df.columns:
         df["plate_num"] = df["plate"]
     if "type" in df.columns and "purpose" not in df.columns:
@@ -68,6 +67,9 @@ def tire_to_num(s: str) -> str:
 def opt(val: str) -> str:
     return "" if val == "(未選択)" else val
 
+def append_record(row: dict):
+    save_history(pd.concat([pd.DataFrame([row]), load_history()], ignore_index=True))
+
 # ── ページ設定 ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="GS接客支援システム",
@@ -78,8 +80,8 @@ st.set_page_config(
 
 defaults = {
     "digits": "",
-    "searched_plate": None,   # None=初期, ""=全件, "1234"=絞り込み
-    "mode": "list",           # "list" | "new_record" | "view_record"
+    "searched_plate": None,
+    "mode": "list",   # "list" | "new_record" | "view_record" | "quote"
     "view_idx": None,
 }
 for k, v in defaults.items():
@@ -96,42 +98,27 @@ st.markdown("""
 html,body,[class*="css"]{font-family:'Inter','Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;}
 @media(max-width:768px){.main .block-container,[data-testid="stMainBlockContainer"]{padding:0.4rem!important;}}
 
-/* ── テンキー列強制 */
-[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="column"]{
-    width:31%!important;flex:1 1 31%!important;min-width:31%!important;}
-[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="stButton"]>button{
-    height:66px!important;font-size:1.4rem!important;font-weight:700!important;
-    background:#f7f7f7!important;border:1.5px solid #e3e3e3!important;border-radius:14px!important;
-    color:#1a1a2e!important;box-shadow:0 1px 4px rgba(0,0,0,.06)!important;padding:0!important;
-    transition:background .08s,transform .08s!important;}
+/* テンキー */
+[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="column"]{width:31%!important;flex:1 1 31%!important;min-width:31%!important;}
+[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="stButton"]>button{height:66px!important;font-size:1.4rem!important;font-weight:700!important;background:#f7f7f7!important;border:1.5px solid #e3e3e3!important;border-radius:14px!important;color:#1a1a2e!important;box-shadow:0 1px 4px rgba(0,0,0,.06)!important;padding:0!important;transition:background .08s,transform .08s!important;}
 [data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="stButton"]>button:hover{background:#ebebeb!important;}
 [data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(3):last-child) [data-testid="stButton"]>button:active{background:#d8d8d8!important;transform:scale(.94)!important;}
 
-/* ── Primaryボタン */
-[data-testid="stButton"]>button[data-testid="baseButton-primary"]{
-    background:#2563eb!important;border-color:#1d4ed8!important;color:#fff!important;
-    font-weight:700!important;height:50px!important;border-radius:12px!important;}
-[data-testid="stButton"]>button[data-testid="baseButton-primary"]:hover{
-    background:#1d4ed8!important;box-shadow:0 4px 14px rgba(37,99,235,.3)!important;}
+/* Primaryボタン */
+[data-testid="stButton"]>button[data-testid="baseButton-primary"]{background:#2563eb!important;border-color:#1d4ed8!important;color:#fff!important;font-weight:700!important;height:50px!important;border-radius:12px!important;}
+[data-testid="stButton"]>button[data-testid="baseButton-primary"]:hover{background:#1d4ed8!important;box-shadow:0 4px 14px rgba(37,99,235,.3)!important;}
 
-/* ── 入力ディスプレイ */
-.numpad-display{background:linear-gradient(135deg,#f9f9f9,#efefef);border:1.5px solid #e0e0e0;
-    border-radius:16px;height:66px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+/* 入力ディスプレイ */
+.numpad-display{background:linear-gradient(135deg,#f9f9f9,#efefef);border:1.5px solid #e0e0e0;border-radius:16px;height:66px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
 .d-val{font-size:2.2rem;font-weight:800;letter-spacing:.5rem;color:#1a1a2e;font-variant-numeric:tabular-nums;}
 .d-ph{font-size:1rem;color:#c8c8c8;letter-spacing:.4rem;}
 
-/* ── フィールド */
-[data-testid="stTextInput"] input,
-[data-testid="stTextArea"] textarea,
-[data-testid="stNumberInput"] input{
-    background:#fff!important;border:1.5px solid #e8e8e8!important;border-radius:10px!important;
-    font-size:.92rem!important;color:#1a1a2e!important;transition:border-color .15s!important;}
-[data-testid="stTextInput"] input:focus,
-[data-testid="stTextArea"] textarea:focus{
-    border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.12)!important;}
+/* フィールド */
+[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea,[data-testid="stNumberInput"] input{background:#fff!important;border:1.5px solid #e8e8e8!important;border-radius:10px!important;font-size:.92rem!important;color:#1a1a2e!important;transition:border-color .15s!important;}
+[data-testid="stTextInput"] input:focus,[data-testid="stTextArea"] textarea:focus{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.12)!important;}
 [data-testid="stSelectbox"]>div>div{border:1.5px solid #e8e8e8!important;border-radius:10px!important;}
 
-/* ── バッジ */
+/* バッジ */
 .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.73rem;font-weight:600;}
 .bp{background:#e0f2fe;color:#0369a1;}
 .bt-一般{background:#f1f5f9;color:#64748b;}
@@ -141,22 +128,32 @@ html,body,[class*="css"]{font-family:'Inter','Helvetica Neue',Arial,'Hiragino Ka
 .bg-女{background:#fce7f3;color:#9d174d;}
 .bg-無記名{background:#f1f5f9;color:#94a3b8;}
 
-/* ── Notion風テーブル */
-.tbl-wrap{overflow-x:auto;margin-top:8px;}
-.notion-tbl{width:100%;border-collapse:collapse;min-width:720px;}
-.notion-tbl thead tr{border-bottom:2px solid #e8e8e8;}
-.notion-tbl th{padding:9px 10px;text-align:left;color:#aaa;font-size:.72rem;font-weight:700;letter-spacing:.05em;white-space:nowrap;}
-.notion-tbl tbody tr{border-bottom:1px solid #f2f2f2;}
-.notion-tbl td{padding:10px 10px;vertical-align:middle;font-size:.84rem;color:#1a1a2e;white-space:nowrap;}
-.notion-tbl td.memo-cell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;color:#888;font-size:.78rem;}
+/* 見積カード */
+.q-card{border-radius:16px;padding:16px 18px;margin-bottom:4px;}
+.q-card-a{background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1.5px solid #93c5fd;}
+.q-card-b{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;}
+.q-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:.85rem;}
+.q-row:last-child{border-bottom:none;}
+.q-label{color:#666;}
+.q-val{font-weight:600;color:#1a1a2e;}
+.q-total-a{font-size:1.3rem;font-weight:800;color:#1d4ed8;padding-top:10px;margin-top:6px;border-top:2px solid #93c5fd;}
+.q-total-b{font-size:1.3rem;font-weight:800;color:#15803d;padding-top:10px;margin-top:6px;border-top:2px solid #86efac;}
+.q-plan-label-a{font-size:.95rem;font-weight:800;color:#1d4ed8;margin-bottom:10px;}
+.q-plan-label-b{font-size:.95rem;font-weight:800;color:#15803d;margin-bottom:10px;}
 
-/* ── 詳細カード */
+/* 接客メモ */
+.memo-paper{background:#fffde7;border:1.5px solid #f9d71c;border-radius:12px;padding:4px 8px;}
+
+/* A表チェック */
+.acheck-ok{background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 14px;text-align:center;}
+.acheck-ng{background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:12px 14px;text-align:center;}
+
+/* 詳細カード */
 .detail-card{background:#fafafa;border:1px solid #ebebeb;border-radius:16px;padding:22px 24px;margin-bottom:12px;}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;font-size:.88rem;margin-top:12px;}
 .detail-label{color:#aaa;font-size:.75rem;display:block;margin-bottom:2px;}
 .detail-val{color:#1a1a2e;font-weight:500;}
-.memo-box{margin-top:14px;padding:10px 14px;background:#fff9ee;border-left:4px solid #f0a500;
-    border-radius:0 8px 8px 0;font-size:.86rem;color:#6b4c00;line-height:1.75;}
+.memo-box{margin-top:14px;padding:10px 14px;background:#fff9ee;border-left:4px solid #f0a500;border-radius:0 8px 8px 0;font-size:.86rem;color:#6b4c00;line-height:1.75;}
 
 .divider{border:none;border-top:1px solid #f0f0f0;margin:12px 0;}
 .sec-title{font-size:.73rem;font-weight:700;color:#aaa;letter-spacing:.08em;text-transform:uppercase;margin:16px 0 6px;}
@@ -203,7 +200,7 @@ with left:
                         st.session_state.view_idx = None
 
     if st.button("🔍  検索", key="nsearch", type="primary", use_container_width=True):
-        st.session_state.searched_plate = st.session_state.digits  # ""なら全件
+        st.session_state.searched_plate = st.session_state.digits
         st.session_state.digits = ""
         st.session_state.mode = "list"
         st.session_state.view_idx = None
@@ -218,6 +215,9 @@ with left:
     if st.button("➕ 新規来店記録", use_container_width=True, key="btn_new"):
         st.session_state.mode = "new_record"
         st.session_state.view_idx = None
+    if st.button("🛞 タイヤ見積作成", use_container_width=True, key="btn_quote"):
+        st.session_state.mode = "quote"
+        st.session_state.view_idx = None
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  RIGHT
@@ -227,28 +227,212 @@ with right:
     mode = st.session_state.mode
 
     # ────────────────────── 初期画面 ──────────────────────────────────────────
-    if pq is None and mode not in ("new_record", "view_record"):
+    if pq is None and mode not in ("new_record", "view_record", "quote"):
         st.markdown("""
         <div style="padding:70px 32px;text-align:center;">
             <div style="font-size:3rem;margin-bottom:14px">🔍</div>
             <div style="font-size:.92rem;color:#bbb;line-height:2.4">
                 左のテンキーで車番下4桁を入力<br>
-                <span style='color:#ccc;font-size:.8rem'>何も入力せず「検索」を押すと全来店記録を表示</span>
+                <span style='color:#ccc;font-size:.8rem'>何も入力せず「検索」→ 全来店記録を表示</span>
             </div>
         </div>""", unsafe_allow_html=True)
 
-    # ────────────────────── 新規来店記録フォーム ──────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════════
+    #  🛞 見積作成モード
+    # ════════════════════════════════════════════════════════════════════════════
+    elif mode == "quote":
+        if st.button("← 戻る", key="quote_back"):
+            st.session_state.mode = "list"
+            st.rerun()
+
+        st.markdown(
+            "<div style='font-size:1.05rem;font-weight:800;color:#1a1a2e;margin:8px 0 2px'>🛞 タイヤ見積作成</div>",
+            unsafe_allow_html=True)
+
+        # ── 共通設定 ─────────────────────────────────────────────────────────
+        st.markdown("<div class='sec-title'>共通設定</div>", unsafe_allow_html=True)
+        s1, s2, s3, s4 = st.columns(4)
+        with s1: q_qty        = st.selectbox("本数", [4, 2, 1], key="q_qty")
+        with s2: q_labor_unit = st.number_input("工賃（1本・税抜）", min_value=0, value=2500, step=100, key="q_labor_unit", format="%d")
+        with s3: q_disp_unit  = st.number_input("廃タイヤ（1本）", min_value=0, value=300, step=50, key="q_disp_unit", format="%d")
+        with s4: q_plate      = st.text_input("車番下4桁（任意）", placeholder="1234", max_chars=4, key="q_plate")
+
+        labor_sub = q_labor_unit * q_qty
+        disp_sub  = q_disp_unit  * q_qty
+
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+        # ── Plan A / Plan B 並列入力 ──────────────────────────────────────────
+        col_a, col_b = st.columns(2, gap="medium")
+        plans: dict = {}
+
+        for col, pk, plan_css, total_css, plan_emoji, plan_name in [
+            (col_a, "A", "q-card-a", "q-total-a", "⭐", "プランA　オススメ"),
+            (col_b, "B", "q-card-b", "q-total-b", "💰", "プランB　お買い得"),
+        ]:
+            with col:
+                st.markdown(f"<div class='{plan_css} q-card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='q-plan-label-{'a' if pk=='A' else 'b'}'>{plan_emoji} {plan_name}</div>", unsafe_allow_html=True)
+
+                tm   = st.selectbox("タイヤメーカー", TIRE_MAKER_OPTIONS, key=f"q_{pk}_tm")
+                tp   = st.text_input("商品名", placeholder="ENASAVE EC204", key=f"q_{pk}_tp")
+                ts   = st.text_input("タイヤサイズ", placeholder="195/65R15", key=f"q_{pk}_ts")
+                unit = st.number_input("単価（1本・税抜）", min_value=0, value=15000, step=500,
+                                       key=f"q_{pk}_price", format="%d")
+
+                tire_t   = unit     * q_qty
+                subtotal = tire_t + labor_sub + disp_sub
+                tax_amt  = int(subtotal * 0.10)
+                total    = subtotal + tax_amt
+
+                plans[pk] = {
+                    "maker": opt(tm), "product": tp, "size": ts,
+                    "unit": unit, "tire_t": tire_t,
+                    "subtotal": subtotal, "tax": tax_amt, "total": total,
+                }
+
+                st.markdown(f"""
+                <div style="margin-top:10px">
+                    <div class="q-row">
+                        <span class="q-label">🛞 タイヤ代（{q_qty}本）</span>
+                        <span class="q-val">¥{tire_t:,}</span>
+                    </div>
+                    <div class="q-row">
+                        <span class="q-label">🔧 工賃（{q_qty}本）</span>
+                        <span class="q-val">¥{labor_sub:,}</span>
+                    </div>
+                    <div class="q-row">
+                        <span class="q-label">♻️ 廃タイヤ（{q_qty}本）</span>
+                        <span class="q-val">¥{disp_sub:,}</span>
+                    </div>
+                    <div class="q-row">
+                        <span class="q-label">消費税（10%）</span>
+                        <span class="q-val">¥{tax_amt:,}</span>
+                    </div>
+                    <div class="{total_css}" style="display:flex;justify-content:space-between">
+                        <span>税込合計</span>
+                        <span>¥{total:,}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── A表（3割引ライン）チェック ────────────────────────────────────────
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+        st.markdown("<div class='sec-title'>📊 A表（3割引ライン）チェック</div>", unsafe_allow_html=True)
+
+        ac1, ac2 = st.columns([1, 2])
+        with ac1:
+            a_unit = st.number_input("A表単価（1本・税抜）", min_value=0, value=20000, step=500,
+                                     key="a_unit", format="%d",
+                                     help="メーカー希望小売価格（A表）の1本あたり単価")
+
+        a_tire_line = int(a_unit * q_qty * 0.70)   # 3割引ライン
+        a_total_line = a_tire_line + labor_sub + disp_sub
+
+        with ac2:
+            st.markdown(f"""
+            <div style="background:#f8faff;border:1px solid #dbeafe;border-radius:12px;padding:12px 16px;margin-top:22px">
+                <div style="font-size:.75rem;color:#4b6cb7;font-weight:700;margin-bottom:6px">A表3割引ライン（税抜・全部込み）</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.83rem">
+                    <span style="color:#555">タイヤ: <b>¥{a_tire_line:,}</b></span>
+                    <span style="color:#555">工賃: <b>¥{labor_sub:,}</b></span>
+                    <span style="color:#555">廃タイヤ: <b>¥{disp_sub:,}</b></span>
+                    <span style="font-size:1rem;font-weight:800;color:#1d4ed8">最低ライン ¥{a_total_line:,}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        chk_a, chk_b = st.columns(2)
+        for chk_col, pk, plan_name in [(chk_a,"A","プランA"), (chk_b,"B","プランB")]:
+            diff = plans[pk]["subtotal"] - a_total_line
+            ok   = diff >= 0
+            with chk_col:
+                if ok:
+                    st.markdown(f"""
+                    <div class="acheck-ok">
+                        <div style="font-size:1.4rem">✅</div>
+                        <div style="font-size:.9rem;font-weight:700;color:#166534">{plan_name}　利益あり</div>
+                        <div style="font-size:.82rem;color:#166534">+¥{diff:,} の余裕</div>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="acheck-ng">
+                        <div style="font-size:1.4rem">❌</div>
+                        <div style="font-size:.9rem;font-weight:700;color:#991b1b">{plan_name}　赤字注意</div>
+                        <div style="font-size:.82rem;color:#991b1b">-¥{abs(diff):,} 不足</div>
+                    </div>""", unsafe_allow_html=True)
+
+        # ── 接客メモ ──────────────────────────────────────────────────────────
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='sec-title'>✏️ 接客メモ（殴り書きOK）</div>",
+            unsafe_allow_html=True)
+        st.markdown("<div class='memo-paper'>", unsafe_allow_html=True)
+        q_memo = st.text_area(
+            label="接客メモ",
+            placeholder="お客様の要望・タイヤの状態・次回案内・特記事項など、自由に書いてください",
+            height=180,
+            key="q_memo",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── 保存ボタン ────────────────────────────────────────────────────────
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+        sv_a, sv_b, sv_close = st.columns(3)
+
+        def build_row(pk: str) -> dict:
+            p = plans[pk]
+            note = (
+                f"【プラン{pk}】{p['maker']} {p['product']} {p['size']} "
+                f"/ {q_qty}本 / ¥{p['unit']:,}/本 / 税込¥{p['total']:,}"
+                + (f"\n{q_memo}" if q_memo else "")
+            )
+            return {
+                "date": datetime.now().strftime("%Y/%m/%d %H:%M"),
+                "purpose": "タイヤ見積", "cust_type": "",
+                "plate_area": "", "plate_3digit": "", "plate_kana": "",
+                "plate_num": q_plate,
+                "maker": "", "car_model": "", "color": "",
+                "age": "", "gender": "",
+                "tire_size": p["size"], "tire_size_num": tire_to_num(p["size"]),
+                "tire_year": "", "tire_maker": p["maker"],
+                "tire_product": p["product"], "memo": note,
+            }
+
+        with sv_a:
+            if st.button("📋 プランAで保存", type="primary", use_container_width=True, key="save_qa"):
+                append_record(build_row("A"))
+                st.success("プランAを保存しました！")
+                st.session_state.mode = "list"
+                st.session_state.searched_plate = q_plate or ""
+                st.rerun()
+        with sv_b:
+            if st.button("📋 プランBで保存", use_container_width=True, key="save_qb"):
+                append_record(build_row("B"))
+                st.success("プランBを保存しました！")
+                st.session_state.mode = "list"
+                st.session_state.searched_plate = q_plate or ""
+                st.rerun()
+        with sv_close:
+            if st.button("閉じる", use_container_width=True, key="close_quote"):
+                st.session_state.mode = "list"
+                st.rerun()
+
+    # ════════════════════════════════════════════════════════════════════════════
+    #  ➕ 新規来店記録フォーム
+    # ════════════════════════════════════════════════════════════════════════════
     elif mode == "new_record":
         st.markdown("<div class='sec-title'>➕ 新規来店記録</div>", unsafe_allow_html=True)
 
         with st.form("new_form"):
-            # ── 基本情報
             c1, c2, c3 = st.columns(3)
             with c1: f_date    = st.text_input("📅 日付", value=datetime.now().strftime("%Y/%m/%d %H:%M"))
             with c2: f_purpose = st.selectbox("🎯 来店目的", PURPOSE_OPTIONS)
             with c3: f_ctype   = st.selectbox("👤 種別", CUST_TYPE_OPTIONS)
 
-            # ── ナンバープレート
             st.markdown("<div class='sec-title'>ナンバープレート</div>", unsafe_allow_html=True)
             p1, p2, p3, p4 = st.columns([2, 1, 1, 1])
             with p1: f_area   = st.selectbox("地名", PLATE_AREAS)
@@ -256,7 +440,6 @@ with right:
             with p3: f_kana   = st.selectbox("かな", KANA_OPTIONS)
             with p4: f_num    = st.text_input("下4桁", placeholder="1234", max_chars=4)
 
-            # ── 車両情報
             st.markdown("<div class='sec-title'>車両情報</div>", unsafe_allow_html=True)
             v1, v2, v3, v4, v5 = st.columns([2, 2, 2, 1, 1])
             with v1: f_maker  = st.selectbox("メーカー", MAKER_OPTIONS)
@@ -265,7 +448,6 @@ with right:
             with v4: f_age    = st.selectbox("年齢", AGE_OPTIONS)
             with v5: f_gender = st.selectbox("性別", GENDER_OPTIONS)
 
-            # ── タイヤ情報
             st.markdown("<div class='sec-title'>タイヤ情報</div>", unsafe_allow_html=True)
             t1, t2, t3, t4 = st.columns([2, 1, 2, 2])
             with t1: f_tsize  = st.text_input("タイヤサイズ", placeholder="225/50R17")
@@ -280,7 +462,7 @@ with right:
             with sb: ng = st.form_submit_button("キャンセル", use_container_width=True)
 
         if ok:
-            row = {
+            append_record({
                 "date": f_date, "purpose": f_purpose, "cust_type": f_ctype,
                 "plate_area": opt(f_area), "plate_3digit": f_3digit,
                 "plate_kana": opt(f_kana), "plate_num": f_num,
@@ -289,19 +471,18 @@ with right:
                 "tire_size": f_tsize, "tire_size_num": tire_to_num(f_tsize),
                 "tire_year": f_tyear, "tire_maker": opt(f_tmaker),
                 "tire_product": f_tprod, "memo": f_memo,
-            }
-            updated = pd.concat([pd.DataFrame([row]), load_history()], ignore_index=True)
-            save_history(updated)
+            })
             st.success("保存しました！")
             st.session_state.mode = "list"
             st.session_state.searched_plate = ""
             st.rerun()
-
         if ng:
             st.session_state.mode = "list"
             st.rerun()
 
-    # ────────────────────── 一覧（全件 or 絞り込み）─────────────────────────
+    # ════════════════════════════════════════════════════════════════════════════
+    #  📋 一覧（全件 or 絞り込み）
+    # ════════════════════════════════════════════════════════════════════════════
     elif mode == "list":
         df = load_history()
 
@@ -315,7 +496,7 @@ with right:
         filtered["_dt"] = pd.to_datetime(filtered["date"], errors="coerce")
         filtered = filtered.sort_values("_dt", ascending=False).reset_index(drop=True)
 
-        h1, h2 = st.columns([3, 1])
+        h1, h2, h3 = st.columns([3, 1, 1])
         with h1:
             st.markdown(
                 f"<div style='font-size:1rem;font-weight:700;color:#1a1a2e'>{header}"
@@ -324,6 +505,10 @@ with right:
         with h2:
             if st.button("➕ 新規記録", use_container_width=True, key="new2"):
                 st.session_state.mode = "new_record"
+                st.rerun()
+        with h3:
+            if st.button("🛞 見積作成", use_container_width=True, key="quote2"):
+                st.session_state.mode = "quote"
                 st.rerun()
 
         if filtered.empty:
@@ -336,7 +521,6 @@ with right:
             def mk_badge(text: str, cls: str) -> str:
                 return f'<span class="badge {cls}">{text}</span>' if text else ""
 
-            # テーブルヘッダー行（Streamlit columns で再現）
             hcols = st.columns([1.1, 1.1, 0.8, 1.7, 1.7, 0.9, 1.2, 1.0, 2.0, 0.65])
             labels = ["日付","目的","種別","ナンバー","車両","カラー","タイヤサイズ","客層","備考",""]
             for hc, lb in zip(hcols, labels):
@@ -367,15 +551,15 @@ with right:
                 rcols[8].markdown(
                     f"<div style='font-size:.76rem;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>{row['memo']}</div>",
                     unsafe_allow_html=True)
-
                 if rcols[9].button("詳細", key=f"det_{i}", use_container_width=True):
                     st.session_state.mode = "view_record"
                     st.session_state.view_idx = int(i)
                     st.rerun()
-
                 st.markdown("<div style='border-bottom:1px solid #f2f2f2;margin:0 0 2px 0'></div>", unsafe_allow_html=True)
 
-    # ────────────────────── 詳細表示 ──────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════════
+    #  🔍 詳細表示
+    # ════════════════════════════════════════════════════════════════════════════
     elif mode == "view_record":
         df = load_history()
         df["_dt"] = pd.to_datetime(df["date"], errors="coerce")
@@ -391,7 +575,6 @@ with right:
         if st.button("← 一覧に戻る", key="back"):
             st.session_state.mode = "list"
             st.rerun()
-
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
         plate_str = " ".join(filter(None, [row["plate_area"], row["plate_3digit"],
@@ -404,14 +587,10 @@ with right:
         ctype_b  = badge(row["cust_type"], f"bt-{row['cust_type']}")
         gender_b = badge(row["gender"], f"bg-{row['gender']}")
         purp_b   = badge(row["purpose"], "bp")
-
         tire_full = " ".join(filter(None, [row["tire_size"], row["tire_maker"], row["tire_product"]]))
         tyear_s   = f"{row['tire_year']}年製" if row["tire_year"] else ""
         age_s     = row["age"] if row["age"] not in ("", "(未選択)") else ""
-        memo_html = (
-            f'<div class="memo-box">📝 {row["memo"]}</div>'
-            if row["memo"] else ""
-        )
+        memo_html = f'<div class="memo-box">📝 {row["memo"]}</div>' if row["memo"] else ""
 
         st.markdown(f"""
         <div class="detail-card">
@@ -431,13 +610,10 @@ with right:
         </div>
         """, unsafe_allow_html=True)
 
-        # 同一車番の過去記録
-        same_plate = df[(df["plate_num"] == row["plate_num"]) & (df.index != idx)]
-        if not same_plate.empty:
-            st.markdown(
-                f"<div class='sec-title'>同一車番の過去記録（{len(same_plate)}件）</div>",
-                unsafe_allow_html=True)
-            for _, pr in same_plate.iterrows():
+        same = df[(df["plate_num"] == row["plate_num"]) & (df.index != idx)]
+        if not same.empty:
+            st.markdown(f"<div class='sec-title'>同一車番の過去記録（{len(same)}件）</div>", unsafe_allow_html=True)
+            for _, pr in same.iterrows():
                 pr_purp = badge(pr["purpose"], "bp")
                 pr_car  = " ".join(filter(None, [pr["maker"], pr["car_model"]]))
                 st.markdown(f"""
@@ -446,5 +622,4 @@ with right:
                     <div style="font-size:.76rem;color:#aaa;margin-bottom:4px">{pr['date']}</div>
                     <div style="font-size:.88rem;font-weight:600">{pr_purp} &nbsp;{pr_car}</div>
                     <div style="font-size:.8rem;color:#888;margin-top:3px">{pr['memo']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
