@@ -422,6 +422,9 @@ defaults = {
     "q_hearing_staff": "",
     "q_hearing_size": "",
     "q_preset_idx": 0,
+    # duplicate flow
+    "is_duplicate": False,
+    "duplicate_data": {},
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -921,32 +924,52 @@ with right:
     #  ➕ 新規来店記録
     # ════════════════════════════════════════════════════════════════════════════
     elif mode == "new_record":
-        st.markdown("<div class='sec-title'>➕ 新規来店記録</div>", unsafe_allow_html=True)
+        is_dup = st.session_state.get("is_duplicate", False)
+        dup    = st.session_state.get("duplicate_data", {})
+
+        if is_dup:
+            st.markdown("""
+            <div style="background:#fff8e1;border:1.5px solid #ffc107;border-radius:12px;
+                        padding:10px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+                <span style="font-size:1.3rem">📋</span>
+                <div>
+                    <div style="font-size:.9rem;font-weight:800;color:#856404">履歴をコピーして作成中</div>
+                    <div style="font-size:.76rem;color:#a07000;margin-top:1px">日時は現在時刻に自動更新されます</div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown("<div class='sec-title'>📋 複製して新規来店記録</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='sec-title'>➕ 新規来店記録</div>", unsafe_allow_html=True)
+
+        def _di(opts, key, fallback=0):
+            v = dup.get(key, "") if is_dup else ""
+            return sel_idx(opts, v) if v else fallback
+
         with st.form("new_form"):
             c1,c2,c3 = st.columns(3)
             with c1: f_date    = st.text_input("📅 日付", value=datetime.now().strftime("%Y/%m/%d %H:%M"))
-            with c2: f_purpose = st.selectbox("🎯 来店目的", PURPOSE_OPTIONS)
-            with c3: f_ctype   = st.selectbox("👤 種別", CUST_TYPE_OPTIONS)
+            with c2: f_purpose = st.selectbox("🎯 来店目的", PURPOSE_OPTIONS, index=_di(PURPOSE_OPTIONS, "purpose"))
+            with c3: f_ctype   = st.selectbox("👤 種別", CUST_TYPE_OPTIONS, index=_di(CUST_TYPE_OPTIONS, "cust_type"))
             st.markdown("<div class='sec-title'>ナンバープレート</div>", unsafe_allow_html=True)
             p1,p2,p3,p4 = st.columns([2,1,1,1])
-            with p1: f_area   = st.selectbox("地名", PLATE_AREAS)
-            with p2: f_3digit = st.text_input("3桁", placeholder="500", max_chars=3)
-            with p3: f_kana   = st.selectbox("かな", KANA_OPTIONS)
-            with p4: f_num    = st.text_input("下4桁", placeholder="1234", max_chars=4)
+            with p1: f_area   = st.selectbox("地名", PLATE_AREAS, index=_di(PLATE_AREAS, "plate_area"))
+            with p2: f_3digit = st.text_input("3桁", placeholder="500", max_chars=3, value=dup.get("plate_3digit","") if is_dup else "")
+            with p3: f_kana   = st.selectbox("かな", KANA_OPTIONS, index=_di(KANA_OPTIONS, "plate_kana"))
+            with p4: f_num    = st.text_input("下4桁", placeholder="1234", max_chars=4, value=dup.get("plate_num","") if is_dup else "")
             st.markdown("<div class='sec-title'>車両情報</div>", unsafe_allow_html=True)
             v1,v2,v3,v4,v5 = st.columns([2,2,2,1,1])
-            with v1: f_maker  = st.selectbox("メーカー", MAKER_OPTIONS)
-            with v2: f_car    = st.text_input("車種", placeholder="プリウス")
-            with v3: f_color  = st.selectbox("カラー", COLOR_OPTIONS)
-            with v4: f_age    = st.selectbox("年齢", AGE_OPTIONS)
-            with v5: f_gender = st.selectbox("性別", GENDER_OPTIONS)
+            with v1: f_maker  = st.selectbox("メーカー", MAKER_OPTIONS, index=_di(MAKER_OPTIONS, "maker"))
+            with v2: f_car    = st.text_input("車種", placeholder="プリウス", value=dup.get("car_model","") if is_dup else "")
+            with v3: f_color  = st.selectbox("カラー", COLOR_OPTIONS, index=_di(COLOR_OPTIONS, "color"))
+            with v4: f_age    = st.selectbox("年齢", AGE_OPTIONS, index=_di(AGE_OPTIONS, "age"))
+            with v5: f_gender = st.selectbox("性別", GENDER_OPTIONS, index=_di(GENDER_OPTIONS, "gender"))
             st.markdown("<div class='sec-title'>タイヤ情報</div>", unsafe_allow_html=True)
             t1,t2,t3,t4 = st.columns([2,1,2,2])
-            with t1: f_tsize  = st.text_input("タイヤサイズ", placeholder="225/50R17")
-            with t2: f_tyear  = st.text_input("製造年(下2桁)", placeholder="23", max_chars=2)
-            with t3: f_tmaker = st.selectbox("タイヤメーカー", TIRE_MAKER_OPTIONS)
-            with t4: f_tprod  = st.text_input("タイヤ商品名", placeholder="ENASAVE EC204")
-            f_memo = st.text_area("📝 備考", placeholder="接客メモ・特記事項など", height=80)
+            with t1: f_tsize  = st.text_input("タイヤサイズ", placeholder="225/50R17", value=dup.get("tire_size","") if is_dup else "")
+            with t2: f_tyear  = st.text_input("製造年(下2桁)", placeholder="23", max_chars=2, value=dup.get("tire_year","") if is_dup else "")
+            with t3: f_tmaker = st.selectbox("タイヤメーカー", TIRE_MAKER_OPTIONS, index=_di(TIRE_MAKER_OPTIONS, "tire_maker"))
+            with t4: f_tprod  = st.text_input("タイヤ商品名", placeholder="ENASAVE EC204", value=dup.get("tire_product","") if is_dup else "")
+            f_memo = st.text_area("📝 備考", placeholder="接客メモ・特記事項など", height=80, value=dup.get("memo","") if is_dup else "")
             sa,sb = st.columns(2)
             with sa: ok = st.form_submit_button("💾 保存する", type="primary", use_container_width=True)
             with sb: ng = st.form_submit_button("キャンセル", use_container_width=True)
@@ -959,8 +982,11 @@ with right:
                            "tire_size":f_tsize,"tire_size_num":tire_to_num(f_tsize),
                            "tire_year":f_tyear,"tire_maker":opt(f_tmaker),
                            "tire_product":f_tprod,"memo":f_memo})
-            st.success("保存しました！"); st.session_state.mode="list"; st.session_state.searched_plate=""; st.rerun()
+            st.success("保存しました！")
+            st.session_state.is_duplicate = False; st.session_state.duplicate_data = {}
+            st.session_state.mode="list"; st.session_state.searched_plate=""; st.rerun()
         if ng:
+            st.session_state.is_duplicate = False; st.session_state.duplicate_data = {}
             st.session_state.mode="list"; st.rerun()
 
     # ════════════════════════════════════════════════════════════════════════════
@@ -1063,20 +1089,20 @@ with right:
                 return f'<span class="badge {cls}">{text}</span>' if text else ""
 
             # テーブルヘッダー
-            hcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55])
-            for hc, lb in zip(hcols, ["日付","目的","種別","ナンバー","車両","カラー","タイヤ","客層","備考","","編集"]):
+            hcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55])
+            for hc, lb in zip(hcols, ["日付","目的","種別","ナンバー","車両","カラー","タイヤ","客層","備考","","編集","複製"]):
                 hc.markdown(f"<div style='font-size:.69rem;font-weight:700;color:#aaa;padding-bottom:5px;border-bottom:2px solid #e8e8e8'>{lb}</div>", unsafe_allow_html=True)
 
             for orig_idx, row in filtered.iterrows():
                 plate_str = " ".join(filter(None,[row["plate_area"],row["plate_3digit"],row["plate_kana"],row["plate_num"]]))
                 car_str   = " ".join(filter(None,[row["maker"],row["car_model"]]))
-                date_s    = str(row["date"])[:10] if row["date"] else ""
+                date_s    = str(row["date"])[:16] if row["date"] else ""
                 age_s     = row["age"] if row["age"] not in ("","(未選択)") else ""
                 gender_b  = mk_badge(row["gender"], f"bg-{row['gender']}")
                 purpose_b = mk_badge(row["purpose"], "bp")
                 ctype_b   = mk_badge(row["cust_type"], f"bt-{row['cust_type']}")
 
-                rcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55])
+                rcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55])
                 rcols[0].markdown(f"<div style='font-size:.76rem;color:#bbb;padding-top:5px'>{date_s}</div>", unsafe_allow_html=True)
                 rcols[1].markdown(purpose_b, unsafe_allow_html=True)
                 rcols[2].markdown(ctype_b, unsafe_allow_html=True)
@@ -1090,6 +1116,12 @@ with right:
                     st.session_state.mode="view_record"; st.session_state.view_idx=int(orig_idx); st.rerun()
                 if rcols[10].button("編集", key=f"edt_{orig_idx}", use_container_width=True):
                     st.session_state.mode="edit_record"; st.session_state.edit_idx=int(orig_idx); st.rerun()
+                if rcols[11].button("複製", key=f"dup_{orig_idx}", use_container_width=True):
+                    st.session_state.is_duplicate = True
+                    st.session_state.duplicate_data = row.to_dict()
+                    st.session_state.mode = "new_record"
+                    st.session_state.view_idx = None
+                    st.rerun()
 
                 st.markdown("<div style='border-bottom:1px solid #f2f2f2;margin:0 0 2px 0'></div>", unsafe_allow_html=True)
 
