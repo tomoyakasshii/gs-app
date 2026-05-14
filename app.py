@@ -425,6 +425,9 @@ defaults = {
     # duplicate flow
     "is_duplicate": False,
     "duplicate_data": {},
+    # delete flow
+    "confirm_delete_idx": None,
+    "deleted_message": "",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -500,6 +503,10 @@ html,body,[class*="css"]{font-family:'Inter','Helvetica Neue',Arial,'Hiragino Ka
 
 .divider{border:none;border-top:1px solid #f0f0f0;margin:10px 0;}
 .sec-title{font-size:.72rem;font-weight:700;color:#aaa;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 5px;}
+
+/* 削除ボタン（13列テーブルの最終列） */
+[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(13)) [data-testid="column"]:nth-child(13) [data-testid="stButton"]>button{background:#fff0f0!important;border:1.5px solid #fca5a5!important;color:#b91c1c!important;font-weight:700!important;}
+[data-testid="stHorizontalBlock"]:has(>[data-testid="column"]:nth-child(13)) [data-testid="column"]:nth-child(13) [data-testid="stButton"]>button:hover{background:#ef4444!important;border-color:#dc2626!important;color:#fff!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1082,6 +1089,43 @@ with right:
             if st.button("🛞 見積作成", use_container_width=True, key="quote2"):
                 st.session_state.mode="quote"; st.rerun()
 
+        # 削除完了メッセージ
+        if st.session_state.get("deleted_message"):
+            st.success(st.session_state.deleted_message)
+            st.session_state.deleted_message = ""
+
+        # 削除確認パネル
+        del_idx = st.session_state.get("confirm_delete_idx")
+        if del_idx is not None and del_idx in df.index:
+            crow    = df.loc[del_idx]
+            c_plate = " ".join(filter(None,[crow["plate_area"],crow["plate_3digit"],crow["plate_kana"],crow["plate_num"]]))
+            c_car   = " ".join(filter(None,[crow["maker"],crow["car_model"]]))
+            c_memo  = f'<div style="color:#888;margin-top:4px;font-size:.76rem">{crow["memo"][:60]}</div>' if crow["memo"] else ""
+            st.markdown(f"""
+            <div style="background:#fff0f0;border:2px solid #ef4444;border-radius:12px;padding:14px 16px;margin:8px 0">
+                <div style="font-size:.9rem;font-weight:800;color:#b91c1c;margin-bottom:6px">🗑️ 削除の確認</div>
+                <div style="font-size:.82rem;color:#374151;margin-bottom:8px">
+                    以下のデータを削除します。この操作は<b>取り消せません</b>。
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 12px;font-size:.82rem;border:1px solid #fca5a5">
+                    <b>{crow['date']}</b>&nbsp;/&nbsp;{crow['purpose']}&nbsp;/&nbsp;{c_plate or '（車番なし）'}&nbsp;/&nbsp;{c_car or '（車種なし）'}
+                    {c_memo}
+                </div>
+            </div>""", unsafe_allow_html=True)
+            dc1, dc2, _ = st.columns([1, 1, 4])
+            with dc1:
+                if st.button("🗑️ はい、削除する", use_container_width=True, key="confirm_delete_btn", type="primary"):
+                    new_df = df.drop(index=del_idx)
+                    save_history(new_df)
+                    label = c_plate or crow["purpose"] or "記録"
+                    st.session_state.confirm_delete_idx = None
+                    st.session_state.deleted_message = f"「{label}」の記録を削除しました"
+                    st.rerun()
+            with dc2:
+                if st.button("キャンセル", use_container_width=True, key="cancel_delete_btn"):
+                    st.session_state.confirm_delete_idx = None
+                    st.rerun()
+
         if filtered.empty:
             st.markdown("<div style='padding:36px;text-align:center;color:#ccc;border:1px dashed #e0e0e0;border-radius:14px;margin-top:10px'>記録が見つかりません</div>", unsafe_allow_html=True)
         else:
@@ -1089,8 +1133,8 @@ with right:
                 return f'<span class="badge {cls}">{text}</span>' if text else ""
 
             # テーブルヘッダー
-            hcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55])
-            for hc, lb in zip(hcols, ["日付","目的","種別","ナンバー","車両","カラー","タイヤ","客層","備考","","編集","複製"]):
+            hcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55,0.55])
+            for hc, lb in zip(hcols, ["日付","目的","種別","ナンバー","車両","カラー","タイヤ","客層","備考","","編集","複製","削除"]):
                 hc.markdown(f"<div style='font-size:.69rem;font-weight:700;color:#aaa;padding-bottom:5px;border-bottom:2px solid #e8e8e8'>{lb}</div>", unsafe_allow_html=True)
 
             for orig_idx, row in filtered.iterrows():
@@ -1102,7 +1146,7 @@ with right:
                 purpose_b = mk_badge(row["purpose"], "bp")
                 ctype_b   = mk_badge(row["cust_type"], f"bt-{row['cust_type']}")
 
-                rcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55])
+                rcols = st.columns([1.0,1.0,0.75,1.6,1.6,0.85,1.1,0.95,1.8,0.55,0.55,0.55,0.55])
                 rcols[0].markdown(f"<div style='font-size:.76rem;color:#bbb;padding-top:5px'>{date_s}</div>", unsafe_allow_html=True)
                 rcols[1].markdown(purpose_b, unsafe_allow_html=True)
                 rcols[2].markdown(ctype_b, unsafe_allow_html=True)
@@ -1121,6 +1165,9 @@ with right:
                     st.session_state.duplicate_data = row.to_dict()
                     st.session_state.mode = "new_record"
                     st.session_state.view_idx = None
+                    st.rerun()
+                if rcols[12].button("🗑️", key=f"del_{orig_idx}", use_container_width=True):
+                    st.session_state.confirm_delete_idx = int(orig_idx)
                     st.rerun()
 
                 st.markdown("<div style='border-bottom:1px solid #f2f2f2;margin:0 0 2px 0'></div>", unsafe_allow_html=True)
